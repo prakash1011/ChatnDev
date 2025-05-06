@@ -14,21 +14,26 @@ connect();
 const app = express();
 
 // Middleware
+// Set cross-origin isolation headers FIRST to ensure they aren't overridden
+app.use((req, res, next) => {
+  // These headers are required for SharedArrayBuffer
+  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  // Additional security headers that might help
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  next();
+});
+
 app.use(cors({
   origin: [
     'http://localhost:5173',              // Local development
     'https://soen-frontend.onrender.com',   // Render deployment
     'https://chatndev.onrender.com'        // New frontend
   ],
-  credentials: true
+  credentials: true,
+  // Ensure CORS doesn't override our security headers
+  exposedHeaders: ['Cross-Origin-Embedder-Policy', 'Cross-Origin-Opener-Policy']
 }));
-
-// Add cross-origin isolation headers for SharedArrayBuffer support
-app.use((req, res, next) => {
-  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-  next();
-});
 
 app.use(morgan('dev'));
 app.use(express.json());
