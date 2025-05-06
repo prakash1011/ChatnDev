@@ -1,3 +1,4 @@
+
 {
   "name": "backend",
   "version": "1.0.0",
@@ -10,7 +11,7 @@
     "build": "npm ci"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=16.0.0 <24.0.0"
   },
   "keywords": [],
   "author": "",
