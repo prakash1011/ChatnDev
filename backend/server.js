@@ -16,7 +16,7 @@ const io = new Server(server, {
     cors: {
         origin: [
             'http://localhost:5173',              // Local development
-            'https://soen-frontend.onrender.com'   // Render deployment
+            'https://chatndev.onrender.com'   // Render deployment
         ],
         credentials: true
     }
