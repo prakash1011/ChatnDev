@@ -102,8 +102,20 @@ const model = genAI.getGenerativeModel({
 });
 
 export const generateResult = async (prompt) => {
+    try {
+        // Check if Google AI API key is configured
+        if (!process.env.GOOGLE_AI_KEY) {
+            console.error('GOOGLE_AI_KEY is not set in environment variables');
+            return "I'm sorry, the AI service is not properly configured. Please contact the administrator.";
+        }
 
-    const result = await model.generateContent(prompt);
+        // Process the prompt with the AI model
+        const result = await model.generateContent(prompt);
 
-    return result.response.text()
+        // Return the text response
+        return result.response.text();
+    } catch (error) {
+        console.error('Error generating AI content:', error);
+        return "I'm sorry, I couldn't process your request at this time. Please try again later.";
+    }
 }

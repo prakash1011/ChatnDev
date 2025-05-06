@@ -16,7 +16,8 @@ const io = new Server(server, {
     cors: {
         origin: [
             'http://localhost:5173',              // Local development
-            'https://chatndev.onrender.com'   // Render deployment
+            'https://soen-frontend.onrender.com',   // Render deployment
+            'https://chatndev.onrender.com'        // New frontend
         ],
         credentials: true
     }
@@ -27,7 +28,7 @@ io.use(async (socket, next) => {
 
     try {
 
-        const token = socket.handshake.auth?.token || socket.handshake.headers.authorization?.split(' ')[ 1 ];
+        const token = socket.handshake.auth?.token || socket.handshake.headers.authorization?.split(' ')[1];
         const projectId = socket.handshake.query.projectId;
 
         if (!mongoose.Types.ObjectId.isValid(projectId)) {
@@ -71,33 +72,65 @@ io.on('connection', socket => {
     socket.join(socket.roomId);
 
     socket.on('project-message', async data => {
+        try {
+            const message = data.message;
 
-        const message = data.message;
+            // Forward the message to all users in the room except the sender
+            socket.broadcast.to(socket.roomId).emit('project-message', data);
 
-        const aiIsPresentInMessage = message.includes('@ai');
-        socket.broadcast.to(socket.roomId).emit('project-message', data)
+            // Check if this is a message directed to the AI
+            const aiIsPresentInMessage = message && typeof message === 'string' && message.includes('@ai');
 
-        if (aiIsPresentInMessage) {
+            if (aiIsPresentInMessage) {
+                console.log('AI message detected, processing prompt...');
 
+                // Acknowledge the AI request is being processed
+                io.to(socket.roomId).emit('ai-processing', { processing: true });
 
-            const prompt = message.replace('@ai', '');
+                // Extract the prompt by removing the @ai mention
+                const prompt = message.replace('@ai', '').trim();
 
-            const result = await generateResult(prompt);
+                if (prompt.length === 0) {
+                    // If prompt is empty, send a help message
+                    io.to(socket.roomId).emit('project-message', {
+                        message: "Hi there! I'm the AI assistant. How can I help you with your project today?",
+                        sender: {
+                            _id: 'ai',
+                            email: 'AI'
+                        }
+                    });
+                } else {
+                    // Generate AI response
+                    const result = await generateResult(prompt);
 
+                    // Send the AI response back to all users in the room
+                    io.to(socket.roomId).emit('project-message', {
+                        message: result,
+                        sender: {
+                            _id: 'ai',
+                            email: 'AI'
+                        }
+                    });
+                }
 
+                // Signal that AI processing is complete
+                io.to(socket.roomId).emit('ai-processing', { processing: false });
+            }
+        } catch (error) {
+            console.error('Error processing message:', error);
+
+            // Send error message if something went wrong
             io.to(socket.roomId).emit('project-message', {
-                message: result,
+                message: "Sorry, I couldn't process your request at this time. Please try again later.",
                 sender: {
                     _id: 'ai',
                     email: 'AI'
                 }
-            })
+            });
 
-
-            return
+            // Signal that AI processing is complete
+            io.to(socket.roomId).emit('ai-processing', { processing: false });
         }
-
-
     })
 
     socket.on('disconnect', () => {
@@ -110,5 +143,5 @@ io.on('connection', socket => {
 
 
 server.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
+    console.log(`Server is running on port ${ port }`);
 })
