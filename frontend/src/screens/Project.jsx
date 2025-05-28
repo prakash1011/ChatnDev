@@ -574,7 +574,7 @@ const Project = () => {
                                         console.error("Error running server:", error);
                                     }
                                 }}
-                                className='py-2 px-4 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors duration-200 flex items-center gap-2 text-sm font-medium'
+                                className='py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors duration-200 flex items-center gap-2 text-sm font-medium'
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
@@ -587,7 +587,7 @@ const Project = () => {
                     <div className="bottom flex flex-grow max-w-full shrink overflow-auto">
                         {
                             fileTree[ currentFile ] && (
-                                <div className="code-editor-area h-full overflow-auto flex-grow bg-black text-white">
+                                <div className="code-editor-area h-full overflow-auto flex-grow bg-slate-800">
                                     <pre
                                         className="hljs h-full">
                                         <code
@@ -612,8 +612,7 @@ const Project = () => {
                                                 whiteSpace: 'pre-wrap',
                                                 paddingBottom: '25rem',
                                                 counterSet: 'line-numbering',
-                                                backgroundColor: 'black',
-                                                color: 'white',
+                                                backgroundColor: '#1e293b',  // slate-800 color
                                                 padding: '1rem'
                                             }}
                                         />
