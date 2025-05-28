@@ -119,6 +119,15 @@ const Project = () => {
     }
 
     function WriteAiMessage(message) {
+        // Safety check for null or undefined messages
+        if (!message) {
+            return (
+                <div className='overflow-auto bg-slate-950 text-white rounded-sm p-2'>
+                    <p>Empty message received from AI</p>
+                </div>
+            );
+        }
+
         // Handle cases where the message might already be an object or has parseError flag
         if (typeof message === 'object' && message.parseError) {
             // This is a message that couldn't be parsed in handleProjectMessage
@@ -132,13 +141,38 @@ const Project = () => {
             );
         }
         
-        // Try to parse the message if it's a string
+        // If it's not a string, just display it as is (already parsed)
+        if (typeof message !== 'string') {
+            return (
+                <div className='overflow-auto bg-slate-950 text-white rounded-sm p-2'>
+                    <p>{message.text || JSON.stringify(message)}</p>
+                </div>
+            );
+        }
+        
+        // Try to sanitize the message first - remove any trailing characters after valid JSON
+        let sanitizedMessage = message;
+        try {
+            // Look for first opening brace and last closing brace
+            const firstBrace = message.indexOf('{');
+            const lastBrace = message.lastIndexOf('}');
+            
+            if (firstBrace >= 0 && lastBrace > firstBrace) {
+                // Extract just the potential JSON part
+                sanitizedMessage = message.substring(firstBrace, lastBrace + 1);
+            }
+        } catch (err) {
+            console.warn('Error sanitizing message:', err);
+            // Just use the original message if sanitization fails
+        }
+        
+        // Try to parse the message as JSON
         let messageObject;
         try {
-            messageObject = typeof message === 'string' ? JSON.parse(message) : message;
+            messageObject = JSON.parse(sanitizedMessage);
         } catch (error) {
             console.error('Error parsing AI message in WriteAiMessage:', error);
-            // Provide a fallback message object if parsing fails
+            // Last resort - just display the raw message
             return (
                 <div className='overflow-auto bg-slate-950 text-white rounded-sm p-2'>
                     <p>Error displaying AI message. Raw content:</p>
@@ -217,9 +251,20 @@ const Project = () => {
             
             if (data.sender._id === 'ai') {
                 try {
-                    // Safely parse the JSON message
-                    const message = JSON.parse(data.message)
-                    console.log('AI message:', message)
+                    // Try to sanitize the message by extracting just the JSON part
+                    let messageToParse = data.message;
+                    
+                    // Find the first { and last } to extract potential JSON
+                    const firstBrace = messageToParse.indexOf('{');
+                    const lastBrace = messageToParse.lastIndexOf('}');
+                    
+                    if (firstBrace >= 0 && lastBrace > firstBrace) {
+                        messageToParse = messageToParse.substring(firstBrace, lastBrace + 1);
+                    }
+                    
+                    // Now try to parse the cleaned message
+                    const message = JSON.parse(messageToParse);
+                    console.log('AI message parsed successfully:', message);
 
                     // Only attempt to mount fileTree if webContainer exists
                     if (message.fileTree) {
@@ -235,8 +280,11 @@ const Project = () => {
                         // Update fileTree state
                         setFileTree(message.fileTree || {})
                     }
+                    
+                    // Store the parsed message back in data for proper rendering
+                    data.parsedMessage = message;
                 } catch (parseError) {
-                    console.error('Error parsing AI message:', parseError)
+                    console.error('Error parsing AI message:', parseError, data.message);
                     // Still add the message to the UI, but as plain text
                     data.parseError = true;
                 }
@@ -366,7 +414,7 @@ const Project = () => {
                                 <small className='text-gray-600 text-xs font-medium mb-1'>{msg.sender.email}</small>
                                 <div className={`${msg.sender._id === 'ai' ? 'text-sm overflow-auto max-h-96' : 'text-base'}`}>
                                     {msg.sender._id === 'ai' ?
-                                        WriteAiMessage(msg.message)
+                                        WriteAiMessage(msg.parseError ? msg : (msg.parsedMessage || msg.message))
                                         : <p className="text-gray-800">{msg.message}</p>}
                                 </div>
                             </div>
@@ -496,34 +544,45 @@ const Project = () => {
                         <div className="actions flex gap-2 p-2">
                             <button
                                 onClick={async () => {
-                                    await webContainer.mount(fileTree)
-
-                                    const installProcess = await webContainer.spawn("npm", [ "install" ])
-
-                                    installProcess.output.pipeTo(new WritableStream({
-                                        write(chunk) {
-                                            console.log(chunk)
-                                        }
-                                    }))
-
-                                    if (runProcess) {
-                                        runProcess.kill()
+                                    // Check if webContainer exists before trying to use it
+                                    if (!webContainer) {
+                                        console.warn('WebContainer is not available in this environment');
+                                        alert('Running code is only available in local development mode, not in the deployed application.');
+                                        return;
                                     }
+                                    
+                                    try {
+                                        await webContainer.mount(fileTree)
+                                        const installProcess = await webContainer.spawn("npm", [ "install" ])
 
-                                    let tempRunProcess = await webContainer.spawn("npm", [ "start" ]);
+                                        installProcess.output.pipeTo(new WritableStream({
+                                            write(chunk) {
+                                                console.log(chunk);
+                                            }
+                                        }))
 
-                                    tempRunProcess.output.pipeTo(new WritableStream({
-                                        write(chunk) {
-                                            console.log(chunk)
-                                        }
-                                    }))
+                                        await installProcess.exit
 
-                                    setRunProcess(tempRunProcess)
+                                        // Start the dev server
+                                        const serverProcess = await webContainer.spawn("npm", [ "run", "dev" ])
 
-                                    webContainer.on('server-ready', (port, url) => {
-                                        console.log(port, url)
-                                        setIframeUrl(url)
-                                    })
+                                        serverProcess.output.pipeTo(new WritableStream({
+                                            write(chunk) {
+                                                console.log(chunk);
+                                            }
+                                        }))
+
+                                        // Wait for the server to be ready
+                                        setRunProcess(serverProcess)
+
+                                        // Once the server is ready, find the URL where it's running
+                                        webContainer.on("server-ready", (port, url) => {
+                                            setIframeUrl(url)
+                                        })
+                                    } catch (error) {
+                                        console.error('Error running project in WebContainer:', error);
+                                        alert('Failed to run the project: ' + error.message);
+                                    }
                                 }}
                                 className='py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors duration-200 flex items-center gap-2 text-sm font-medium'
                             >
