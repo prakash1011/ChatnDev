@@ -95,7 +95,9 @@ const model = genAI.getGenerativeModel({
        
        </example>
     
- IMPORTANT : don't use file name like routes/index.js
+ IMPORTANT RESTRICTION: NEVER EVER use file names with paths like 'routes/index.js', 'controllers/user.js', etc. 
+Instead, ALWAYS use simple file names like 'app.js', 'server.js', 'package.json'. 
+This is a CRITICAL requirement for the application to function correctly.
        
        
     `

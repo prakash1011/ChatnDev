@@ -2,16 +2,34 @@
   command = "npm run build"
   publish = "dist"
 
-[build.environment]
-  NODE_VERSION = "20"
+[dev]
+  command = "npm run dev"
+  port = 3000
 
+# Redirect API requests to the backend
+[[redirects]]
+  from = "/users/*"
+  to = "https://chatndev.onrender.com/users/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/projects/*"
+  to = "https://chatndev.onrender.com/projects/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/messages/*"
+  to = "https://chatndev.onrender.com/messages/:splat"
+  status = 200
+  force = true
+
+# Handle client-side routing
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-[[headers]]
-  for = "/*"
-    [headers.values]
-    Cross-Origin-Embedder-Policy = "require-corp"
-    Cross-Origin-Opener-Policy = "same-origin"
+[build.environment]
+  VITE_API_URL = "https://chatndev.onrender.com"
