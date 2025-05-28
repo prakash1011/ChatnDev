@@ -299,14 +299,13 @@ const Project = () => {
         // Register the message handler
         receiveMessage('project-message', handleProjectMessage)
         
-        // Initialize web container if needed, but only in local development environment
-        // WebContainer will not work in the deployed environment
-        if (!webContainer && !import.meta.env.PROD) {
+        // Initialize web container if needed
+        if (!webContainer) {
             getWebContainer().then(container => {
                 setWebContainer(container)
                 console.log("container started")
             }).catch(err => {
-                console.warn("WebContainer initialization failed:", err)
+                console.error("WebContainer initialization failed:", err)
             })
         }
         
@@ -546,9 +545,15 @@ const Project = () => {
                                 onClick={async () => {
                                     // Check if webContainer exists before trying to use it
                                     if (!webContainer) {
-                                        console.warn('WebContainer is not available in this environment');
-                                        alert('Running code is only available in local development mode, not in the deployed application.');
-                                        return;
+                                        console.log('Initializing WebContainer...');
+                                        try {
+                                            const container = await getWebContainer();
+                                            setWebContainer(container);
+                                            console.log("WebContainer started");
+                                        } catch (err) {
+                                            console.error("Error initializing WebContainer:", err);
+                                            return;
+                                        }
                                     }
                                     
                                     try {
