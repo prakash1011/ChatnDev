@@ -119,13 +119,34 @@ const Project = () => {
     }
 
     function WriteAiMessage(message) {
+        // Handle cases where the message might already be an object or has parseError flag
+        if (typeof message === 'object' && message.parseError) {
+            // This is a message that couldn't be parsed in handleProjectMessage
+            return (
+                <div className='overflow-auto bg-slate-950 text-white rounded-sm p-2'>
+                    <p>Error parsing AI message. Displaying raw content:</p>
+                    <pre className='mt-2 p-2 bg-slate-800 rounded text-sm overflow-auto'>
+                        {message.message || 'No content available'}
+                    </pre>
+                </div>
+            );
+        }
+        
+        // Try to parse the message if it's a string
         let messageObject;
         try {
-            messageObject = JSON.parse(message);
+            messageObject = typeof message === 'string' ? JSON.parse(message) : message;
         } catch (error) {
-            console.error('Error parsing AI message:', error);
+            console.error('Error parsing AI message in WriteAiMessage:', error);
             // Provide a fallback message object if parsing fails
-            messageObject = { text: 'Error displaying AI message. Please try again.' };
+            return (
+                <div className='overflow-auto bg-slate-950 text-white rounded-sm p-2'>
+                    <p>Error displaying AI message. Raw content:</p>
+                    <pre className='mt-2 p-2 bg-slate-800 rounded text-sm overflow-auto'>
+                        {message || 'No content available'}
+                    </pre>
+                </div>
+            );
         }
 
         return (
@@ -195,15 +216,29 @@ const Project = () => {
             console.log('Message received:', data)
             
             if (data.sender._id === 'ai') {
-                const message = JSON.parse(data.message)
-                console.log('AI message:', message)
+                try {
+                    // Safely parse the JSON message
+                    const message = JSON.parse(data.message)
+                    console.log('AI message:', message)
 
-                if (webContainer && message.fileTree) {
-                    webContainer.mount(message.fileTree)
-                }
-
-                if (message.fileTree) {
-                    setFileTree(message.fileTree || {})
+                    // Only attempt to mount fileTree if webContainer exists
+                    if (message.fileTree) {
+                        // Only attempt to mount if webContainer exists and has mount method
+                        if (webContainer && typeof webContainer.mount === 'function') {
+                            try {
+                                webContainer.mount(message.fileTree)
+                            } catch (mountError) {
+                                console.error('Error mounting file tree:', mountError)
+                            }
+                        }
+                        
+                        // Update fileTree state
+                        setFileTree(message.fileTree || {})
+                    }
+                } catch (parseError) {
+                    console.error('Error parsing AI message:', parseError)
+                    // Still add the message to the UI, but as plain text
+                    data.parseError = true;
                 }
                 // Update messages state once
                 setMessages(prevMessages => [ ...prevMessages, data ])
