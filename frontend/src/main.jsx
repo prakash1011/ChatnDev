@@ -5,9 +5,6 @@ import 'remixicon/fonts/remixicon.css'
 import './dark-theme.css'  // Import dark theme styles
 import App from './App.jsx'
 
-// Apply dark theme to body
-document.body.classList.add('dark-theme')
-
 createRoot(document.getElementById('root')).render(
 
   <App />
