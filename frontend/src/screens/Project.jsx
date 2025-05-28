@@ -7,15 +7,12 @@ import Markdown from 'markdown-to-jsx'
 import hljs from 'highlight.js';
 import { getWebContainer } from '../config/webContainer'
 
-
 function SyntaxHighlightedCode(props) {
     const ref = useRef(null)
 
     React.useEffect(() => {
         if (ref.current && props.className?.includes('lang-') && window.hljs) {
             window.hljs.highlightElement(ref.current)
-
-            // hljs won't reprocess the element unless this attribute is removed
             ref.current.removeAttribute('data-highlighted')
         }
     }, [ props.className, props.children ])
@@ -23,23 +20,22 @@ function SyntaxHighlightedCode(props) {
     return <code {...props} ref={ref} />
 }
 
-
 const Project = () => {
     const location = useLocation()
     const navigate = useNavigate()
 
     const [ isSidePanelOpen, setIsSidePanelOpen ] = useState(false)
     const [ isModalOpen, setIsModalOpen ] = useState(false)
-    const [ selectedUserId, setSelectedUserId ] = useState(new Set()) // Initialized as Set
+    const [ selectedUserId, setSelectedUserId ] = useState(new Set())
     const [ project, setProject ] = useState(location.state.project)
     const [ message, setMessage ] = useState('')
     const { user, setUser } = useContext(UserContext)
-    const messageBox = React.createRef()
+    const messageBox = useRef()
     const [ welcomeVisible, setWelcomeVisible ] = useState(false)
     const [ isDeletingFile, setIsDeletingFile ] = useState(false)
 
     const [ users, setUsers ] = useState([])
-    const [ messages, setMessages ] = useState([]) // New state variable for messages
+    const [ messages, setMessages ] = useState([]) 
     const [ fileTree, setFileTree ] = useState({})
 
     const [ currentFile, setCurrentFile ] = useState(null)
@@ -59,58 +55,43 @@ const Project = () => {
             } else {
                 newSelectedUserId.add(id);
             }
-
             return newSelectedUserId;
         });
-
-
     }
 
-
     function addCollaborators() {
-
         axios.put("/projects/add-user", {
             projectId: location.state.project._id,
             users: Array.from(selectedUserId)
         }).then(res => {
             console.log(res.data)
             setIsModalOpen(false)
-
         }).catch(err => {
             console.log(err)
         })
-
     }
 
-    // Function to send a message - with validation to prevent empty messages
     const send = () => {
-        // Don't send empty messages
         if (!message || message.trim() === '') {
             return;
         }
         
         const messageContent = message.trim();
         
-        // Update UI immediately
         setMessages(prevMessages => [ ...prevMessages, { sender: user, message: messageContent } ])
-        
-        // Clear input field
         setMessage("")
         
-        // Send message to server
         sendMessage('project-message', {
             message: messageContent,
             sender: user
         })
         
-        // Scroll to bottom
         setTimeout(scrollToBottom, 100);
     }
     
-    // Handle Enter key press to send message
     const handleKeyPress = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault(); // Prevent default to avoid new line in input
+            e.preventDefault();
             send();
         }
     }
@@ -119,119 +100,84 @@ const Project = () => {
         let messageObject;
         
         try {
-            // Try to parse the message as JSON if it's a string
             messageObject = typeof message === 'string' ? JSON.parse(message) : message;
         } catch (error) {
-            // If parsing fails, create a simple object with the message as text
-            console.log('Error parsing AI message:', error);
-            messageObject = { text: message };
+            return <p className="text-gray-800">{message}</p>;
         }
-
-        // Make sure we have a text property
-        const displayText = messageObject.text || message;
         
-        return (
-            <div className='overflow-auto bg-slate-950 text-white rounded-sm p-2'>
-                <Markdown
-                    children={displayText}
-                    options={{
-                        overrides: {
-                            code: SyntaxHighlightedCode,
-                        },
-                    }}
-                />
-            </div>
-        );
+        if (messageObject.type === 'code') {
+            return (
+                <div className="code-block">
+                    <pre>
+                        <SyntaxHighlightedCode className={`lang-${messageObject.language || 'javascript'}`}>
+                            {messageObject.content}
+                        </SyntaxHighlightedCode>
+                    </pre>
+                </div>
+            );
+        } else if (messageObject.type === 'markdown') {
+            return <Markdown>{messageObject.content}</Markdown>;
+        } else {
+            return <p className="text-gray-800">{message}</p>;
+        }
     }
 
-    // Logout function
-    const handleLogout = () => {
-        // Clear user data
-        setUser(null)
-        // Remove token from localStorage
-        localStorage.removeItem('token')
-        // Navigate to login page
-        navigate('/login')
+    function handleLogout() {
+        localStorage.removeItem('token');
+        setUser(null);
+        navigate('/');
     }
 
-    // Welcome message animation effect - only runs once on mount
     useEffect(() => {
-        // Show welcome message animation with delay
         setTimeout(() => {
             setWelcomeVisible(true)
-            
-            // Hide welcome message after 2 seconds
-            setTimeout(() => {
-                setWelcomeVisible(false)
-            }, 2000)
-        }, 300)
-    }, []); // Empty dependency array means this runs only once on mount
+        }, 1000)
+    }, [])
     
-    // Socket initialization and message handling effect
     useEffect(() => {
-        // Initialize socket connection for this project
         const socket = initializeSocket(project._id)
         
-        // Set up a message handler function that we can reference for removal
-        const handleProjectMessage = (data) => {
-            console.log('Message received:', data)
+        function handleProjectMessage(data) {
+            console.log('Received project message:', data);
             
-            if (data.sender._id === 'ai') {
-                const message = JSON.parse(data.message)
-                console.log('AI message:', message)
-
-                if (webContainer && message.fileTree) {
-                    webContainer.mount(message.fileTree)
-                }
-
-                if (message.fileTree) {
-                    setFileTree(message.fileTree || {})
-                }
-                // Update messages state once
-                setMessages(prevMessages => [ ...prevMessages, data ])
-            } else {
-                // Update messages state once for regular messages
-                setMessages(prevMessages => [ ...prevMessages, data ])
+            if (!data || !data.sender) {
+                console.error('Invalid message format received');
+                return;
             }
+            
+            setMessages(prevMessages => [...prevMessages, data]);
+            
+            setTimeout(() => {
+                scrollToBottom();
+            }, 100);
         }
         
-        // Register the message handler
         receiveMessage('project-message', handleProjectMessage)
         
-        // Initialize web container if needed
         if (!webContainer) {
             getWebContainer().then(container => {
-                setWebContainer(container)
-                console.log("container started")
-            })
+                setWebContainer(container);
+            }).catch(err => {
+                console.error('Error initializing WebContainer:', err);
+            });
         }
         
-        // Cleanup function to remove event listeners when component unmounts or dependencies change
         return () => {
-            // Remove the event listener to prevent duplicate messages
-            if (socket) {
-                socket.off('project-message', handleProjectMessage);
-                console.log('Socket listener removed for project-message');
-            }
+            socket.off('project-message', handleProjectMessage);
+            console.log('Socket listener removed for project-message');
         };
-    }, [project._id, webContainer]); // Re-run if project ID or webContainer changes
+    }, [project._id, webContainer]);
     
-    // Project, messages, and user data loading effect
     useEffect(() => {
         const projectId = location.state.project._id;
         
-        // Fetch project data
         axios.get(`/projects/get-project/${projectId}`)
             .then(res => {
-                console.log('Project data loaded:', res.data.project);
                 setProject(res.data.project);
                 setFileTree(res.data.project.fileTree || {});
             })
             .catch(err => console.log('Error loading project:', err));
 
-        // Fetch previous messages for this project
-        console.log('Attempting to fetch messages for project ID:', projectId);
-        
         axios.get(`/messages/${projectId}`)
             .then(res => {
                 console.log('API response for messages:', res.data);
@@ -240,30 +186,23 @@ const Project = () => {
                 const messagesArray = res.data.messages || [];
                 console.log('Messages count:', messagesArray.length);
                 
-                // Process messages to ensure consistent format
                 const processedMessages = messagesArray.map(msg => {
                     console.log('Processing message:', JSON.stringify(msg));
                     
-                    // Make sure we have a valid message object
                     if (!msg || !msg.sender) {
                         console.error('Invalid message format:', msg);
                         return null;
                     }
                     
-                    // If this is an AI message, ensure it's properly formatted
                     if (msg.sender._id === 'ai') {
                         try {
                             console.log('Processing AI message:', typeof msg.message, msg.message);
-                            // Only try to parse if it's a string and not already an object
+                            
                             if (typeof msg.message === 'string') {
-                                // Check if it's already a JSON string
-                                if (msg.message.startsWith('{')) {
-                                    console.log('Message is already JSON formatted');
-                                    // It's already JSON formatted, leave as is
-                                } else {
-                                    console.log('Wrapping plain text in JSON format');
-                                    // Wrap plain text in a proper format
-                                    msg.message = JSON.stringify({ text: msg.message });
+                                try {
+                                    JSON.parse(msg.message);
+                                } catch (error) {
+                                    console.log('AI message is not JSON, keeping as string');
                                 }
                             }
                         } catch (error) {
@@ -271,12 +210,11 @@ const Project = () => {
                         }
                     }
                     return msg;
-                }).filter(msg => msg !== null);  // Remove any null messages
+                }).filter(msg => msg !== null);
                 
                 console.log('Setting messages state with:', processedMessages.length, 'messages');
                 setMessages(processedMessages);
                 
-                // Scroll to bottom of messages after a short delay to ensure rendering
                 setTimeout(() => {
                     console.log('Attempting to scroll to bottom');
                     scrollToBottom();
@@ -289,7 +227,6 @@ const Project = () => {
                 }
             });
 
-        // Fetch users for collaboration
         axios.get('/users/all')
             .then(res => {
                 setUsers(res.data.users || res.data);
@@ -308,85 +245,62 @@ const Project = () => {
         })
     }
     
-    // Handle file deletion
     function deleteFile(filename, e) {
-        e.stopPropagation() // Prevent file selection when clicking delete
+        e.stopPropagation()
         setIsDeletingFile(true)
         
-        // Create a new file tree without the deleted file
         const newFileTree = { ...fileTree }
         delete newFileTree[filename]
         
-        // Update file tree state
         setFileTree(newFileTree)
-        
-        // Update openFiles list - remove the deleted file
         setOpenFiles(openFiles.filter(file => file !== filename))
         
-        // If current file is being deleted, set to null or another file
         if (currentFile === filename) {
             const remainingFiles = Object.keys(newFileTree)
             setCurrentFile(remainingFiles.length > 0 ? remainingFiles[0] : null)
         }
         
-        // Save the updated file tree to the server
         saveFileTree(newFileTree)
         setIsDeletingFile(false)
     }
 
-
-    // Removed appendIncomingMessage and appendOutgoingMessage functions
-
     function scrollToBottom() {
-        // Add null check to prevent errors if messageBox.current is not available yet
         if (messageBox && messageBox.current) {
             messageBox.current.scrollTop = messageBox.current.scrollHeight;
         }
     }
-
+    
     return (
-        <main className='h-screen w-screen flex bg-gradient-to-br from-blue-50 to-indigo-100'>
-            {/* Animated welcome message */}
-            <div className={`fixed top-0 left-0 right-0 bg-blue-500 text-white p-3 text-center transform transition-all duration-700 ease-in-out z-50 ${welcomeVisible ? 'translate-y-0' : '-translate-y-full'}`}>
-                <p className="font-medium">You can message collaborators, ask questions to AI using @ai prompt and also run servers here</p>
-            </div>
-            
-            <section className="left relative flex flex-col h-screen min-w-96 bg-white shadow-md">
-                <header className='flex justify-between items-center p-4 px-5 w-full bg-white border-b border-gray-200 absolute z-10 top-0'>
-                    <button className='flex items-center gap-2 text-blue-600 hover:text-blue-700 transition-colors duration-200 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg' onClick={() => setIsModalOpen(true)}>
+        <main className="flex h-screen overflow-hidden">
+            <section className="left bg-white h-full w-72 min-w-72 border-r border-gray-200 shadow-md flex flex-col overflow-hidden">
+                <div className="top-panel p-4 bg-white border-b border-gray-200 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setIsSidePanelOpen(!isSidePanelOpen)}
+                            className="text-gray-700 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 p-2 rounded-full transition duration-200"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
+                            </svg>
+                        </button>
+                        <h1 className='font-semibold text-lg text-gray-800 truncate'>{project.name}</h1>
+                    </div>
+                    <button
+                        onClick={() => setIsModalOpen(true)}
+                        title="Add collaborators"
+                        className="text-gray-700 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 p-2 rounded-full transition duration-200"
+                    >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        <p>Add collaborator</p>
-                    </button>
-                    <button onClick={() => setIsSidePanelOpen(!isSidePanelOpen)} className='p-2 text-blue-600 hover:text-blue-700 transition-colors duration-200 bg-blue-50 hover:bg-blue-100 rounded-full'>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                         </svg>
                     </button>
-                </header>
-                <div className="conversation-area pt-16 pb-12 flex-grow flex flex-col h-full relative">
-                    <div
-                        ref={messageBox}
-                        className="message-box p-4 flex-grow flex flex-col gap-3 overflow-auto max-h-full scrollbar-hide">
-                        {/* Debug message count */}
-                        {messages.length === 0 && (
-                            <div className="text-center text-gray-500 my-4">
-                                <p>No messages yet. Start a conversation!</p>
-                            </div>
-                        )}
-                        
-                        {/* Map through messages if they exist */}
-                        {messages && messages.length > 0 && messages.map((msg, index) => {
-                            console.log('Rendering message:', index, msg);
-                            // Safety check for malformed messages
-                            if (!msg || !msg.sender) {
-                                console.error('Invalid message at index', index, msg);
-                                return null;
-                            }
-                            
-                            return (
-                                <div key={index} className={`${msg.sender._id === 'ai' ? 'max-w-3xl' : 'max-w-xs md:max-w-sm'} ${msg.sender._id === user?._id?.toString() ? 'ml-auto bg-blue-100 border-blue-200' : 'bg-white border-gray-200'}  message flex flex-col p-3 shadow-sm border w-fit rounded-lg`}>
+                </div>
+                
+                <div className="chat-container relative flex flex-col h-full">
+                    <div className="message-box flex-grow overflow-y-auto p-4" ref={messageBox}>
+                        {messages && messages.length > 0 ? (
+                            messages.map((msg, index) => (
+                                <div key={index} className={`${msg.sender._id === 'ai' ? 'max-w-3xl' : 'max-w-xs md:max-w-sm'} ${msg.sender._id === user?._id?.toString() ? 'ml-auto bg-blue-100 border-blue-200' : 'bg-white border-gray-200'} message flex flex-col p-3 shadow-sm border w-fit rounded-lg mb-4`}>
                                     <small className='text-gray-600 text-xs font-medium mb-1'>{msg.sender.email}</small>
                                     <div className={`${msg.sender._id === 'ai' ? 'text-sm overflow-auto max-h-96' : 'text-base'}`}>
                                         {msg.sender._id === 'ai' ?
@@ -394,10 +308,14 @@ const Project = () => {
                                             : <p className="text-gray-800">{msg.message}</p>}
                                     </div>
                                 </div>
-                            );
-                        })}
+                            ))
+                        ) : (
+                            <div className="text-center text-gray-500 my-4">
+                                <p>No messages yet. Start a conversation!</p>
+                            </div>
+                        )}
                     </div>
-
+                    
                     <div className="inputField w-full flex absolute bottom-0 p-2 bg-white border-t border-gray-200 shadow-md">
                         <input
                             value={message}
@@ -415,47 +333,8 @@ const Project = () => {
                         </button>
                     </div>
                 </div>
-                <div className={`sidePanel w-full h-full flex flex-col gap-2 bg-white absolute transition-all duration-300 shadow-lg ${isSidePanelOpen ? 'translate-x-0' : '-translate-x-full'} top-0 z-20`}>
-                    <header className='flex justify-between items-center px-5 py-4 bg-white border-b border-gray-200'>
-                        <h1 className='font-semibold text-xl text-gray-800'>Collaborators</h1>
-                        <button 
-                            onClick={() => setIsSidePanelOpen(!isSidePanelOpen)} 
-                            className='p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition duration-200'
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </header>
-                    <div className="users flex flex-col gap-3 p-4">
-                        {project.users && project.users.map((collaborator, index) => (
-                            <div key={index} className="user bg-white hover:bg-gray-50 p-3 rounded-lg border border-gray-200 shadow-sm flex items-center gap-3 transition-colors duration-200">
-                                <div className='aspect-square rounded-full w-10 h-10 flex items-center justify-center bg-blue-100 text-blue-600'>
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                    </svg>
-                                </div>
-                                <div className="flex-grow">
-                                    <h1 className='font-medium text-gray-800'>{collaborator.email}</h1>
-                                </div>
-                                {/* Logout button only for the current user */}
-                                {user && user._id === collaborator._id && (
-                                    <button 
-                                        onClick={handleLogout}
-                                        title="Logout"
-                                        className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-600 hover:bg-red-100 rounded-full transition-colors duration-200"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                                        </svg>
-                                    </button>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
             </section>
-
+            
             <section className="right bg-white flex-grow h-full flex shadow-md">
                 <div className="explorer h-full max-w-64 min-w-52 bg-gray-50 border-r border-gray-200">
                     <div className="p-3 border-b border-gray-200 bg-white">
@@ -480,7 +359,6 @@ const Project = () => {
                                         </svg>
                                         <p className='font-medium text-gray-700 truncate'>{file}</p>
                                     </button>
-                                    {/* Delete file button */}
                                     <button
                                         title="Delete file"
                                         disabled={isDeletingFile}
@@ -497,10 +375,9 @@ const Project = () => {
                     </div>
                 </div>
 
-
                 <div className="code-editor flex flex-col flex-grow h-full shrink">
-                    <div className="top flex justify-between w-full bg-gray-50 border-b border-gray-200">
-                        <div className="files flex overflow-x-auto">
+                    <div className="top flex justify-between items-center p-3 border-b border-gray-700 bg-gray-800">
+                        <div className="files flex-grow overflow-hidden">
                             {openFiles.length === 0 ? (
                                 <div className="p-3 text-gray-500 text-sm">No open files</div>
                             ) : (
@@ -508,11 +385,9 @@ const Project = () => {
                                     <button
                                         key={index}
                                         onClick={() => setCurrentFile(file)}
-                                        className={`open-file cursor-pointer p-3 flex items-center w-fit gap-2 border-r border-gray-200 transition-colors duration-150 ${currentFile === file ? 'bg-white text-blue-600 border-b-2 border-b-blue-500' : 'hover:bg-gray-100 text-gray-700'}`}>
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                        <p className='font-medium text-sm'>{file}</p>
+                                        className={`px-3 py-2 rounded-t-md transition-colors duration-200 ${currentFile === file ? 'bg-gray-700 text-gray-100' : 'text-gray-300 hover:bg-gray-700 hover:text-gray-200'}`}
+                                    >
+                                        {file}
                                     </button>
                                 ))
                             )}
@@ -522,7 +397,6 @@ const Project = () => {
                             <button
                                 onClick={async () => {
                                     try {
-                                        // Initialize webContainer if it's not already initialized
                                         let container = webContainer;
                                         if (!container) {
                                             container = await getWebContainer();
@@ -530,55 +404,76 @@ const Project = () => {
                                             console.log("WebContainer initialized");
                                         }
 
-                                        // Make sure we have a valid webContainer before proceeding
                                         if (!container) {
-                                            console.error("Failed to initialize WebContainer");
+                                            console.error('WebContainer not available');
                                             return;
                                         }
 
-                                        // Mount the file tree
-                                        await container.mount(fileTree);
-                                        console.log("Files mounted");
+                                        // Create a simple index.js file to test the server
+                                        const files = {
+                                            ...fileTree
+                                        };
 
-                                        // Install dependencies
-                                        const installProcess = await container.spawn("npm", ["install"]);
-                                        
-                                        installProcess.output.pipeTo(new WritableStream({
-                                            write(chunk) {
-                                                console.log("Install output:", chunk);
-                                            }
-                                        }));
+                                        // Reset any previous URL
+                                        setIframeUrl(null);
 
-                                        // Kill any existing process
-                                        if (runProcess) {
-                                            runProcess.kill();
+                                        // Write all files to the container filesystem
+                                        for (const [filename, fileData] of Object.entries(files)) {
+                                            await container.fs.writeFile(
+                                                filename,
+                                                fileData.file.contents
+                                            );
+                                            console.log(`Wrote file: ${filename}`);
+                                        }
+
+                                        console.log('All files written to container');
+
+                                        // Install dependencies if package.json exists
+                                        if (files['package.json']) {
+                                            console.log('Installing dependencies...');
+                                            const installProcess = await container.spawn('npm', ['install']);
+                                            setRunProcess(installProcess);
+
+                                            installProcess.output.pipeTo(
+                                                new WritableStream({
+                                                    write(data) {
+                                                        console.log(data);
+                                                    }
+                                                })
+                                            );
+
+                                            // Wait for install to complete
+                                            await installProcess.exit;
+                                            console.log('Dependencies installed');
                                         }
 
                                         // Start the server
-                                        let tempRunProcess = await container.spawn("npm", ["start"]);
+                                        console.log('Starting server...');
+                                        const serverProcess = await container.spawn('npm', ['start']);
+                                        setRunProcess(serverProcess);
 
-                                        tempRunProcess.output.pipeTo(new WritableStream({
-                                            write(chunk) {
-                                                console.log("Server output:", chunk);
-                                            }
-                                        }));
+                                        // Log output
+                                        serverProcess.output.pipeTo(
+                                            new WritableStream({
+                                                write(data) {
+                                                    console.log(data);
+                                                }
+                                            })
+                                        );
 
-                                        setRunProcess(tempRunProcess);
-
-                                        // Listen for server-ready event
-                                        container.on('server-ready', (port, url) => {
-                                            console.log("Server ready on port:", port, "URL:", url);
-                                            setIframeUrl(url);
-                                        });
+                                        // Get WebContainer URL
+                                        const url = await container.iframe.getUrl();
+                                        console.log('Server running at:', url);
+                                        setIframeUrl(url);
+                                        setIsServerVisible(true);
                                     } catch (error) {
-                                        console.error("Error running server:", error);
+                                        console.error('Error running server:', error);
                                     }
                                 }}
-                                className='py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors duration-200 flex items-center gap-2 text-sm font-medium'
+                                className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700 transition-colors duration-200 flex items-center gap-1"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                                 Run Server
                             </button>
@@ -587,7 +482,7 @@ const Project = () => {
                     <div className="bottom flex flex-grow max-w-full shrink overflow-auto">
                         {
                             fileTree[ currentFile ] && (
-                                <div className="code-editor-area h-full overflow-auto flex-grow bg-slate-50">
+                                <div className="code-editor-area h-full overflow-auto flex-grow bg-gray-900">
                                     <pre
                                         className="hljs h-full">
                                         <code
@@ -613,7 +508,7 @@ const Project = () => {
                                                 paddingBottom: '25rem',
                                                 counterSet: 'line-numbering',
                                                 padding: '1rem',
-                                                color: '#333333'  // Dark gray text for good readability
+                                                color: '#e2e8f0'  // Light gray text for dark mode readability
                                             }}
                                         />
                                     </pre>
@@ -621,7 +516,6 @@ const Project = () => {
                             )
                         }
                     </div>
-
                 </div>
 
                 {iframeUrl && webContainer && isServerVisible && (
@@ -640,21 +534,18 @@ const Project = () => {
                             </button>
                         </div>
                         <iframe src={iframeUrl} className="w-full h-full"></iframe>
-                    </div>)
-                }
+                    </div>)}
                 
                 {iframeUrl && webContainer && !isServerVisible && (
                     <button 
                         onClick={() => setIsServerVisible(true)}
-                        className="fixed bottom-4 right-4 bg-green-600 hover:bg-green-700 text-white p-2 rounded-full shadow-lg transition-colors duration-200 z-10">
+                        className="fixed bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full shadow-lg transition-colors duration-200 z-10">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                     </button>
                 )}
-
-
             </section>
 
             {isModalOpen && (
@@ -668,7 +559,7 @@ const Project = () => {
                         </header>
                         <div className="users-list flex flex-col gap-2 mb-16 max-h-96 overflow-auto">
                             {users.map(user => (
-                                <div key={user.id} className={`user cursor-pointer hover:bg-slate-200 ${Array.from(selectedUserId).indexOf(user._id) != -1 ? 'bg-slate-200' : ""} p-2 flex gap-2 items-center`} onClick={() => handleUserClick(user._id)}>
+                                <div key={user._id || user.id} className={`user cursor-pointer hover:bg-slate-200 ${Array.from(selectedUserId).indexOf(user._id) != -1 ? 'bg-slate-200' : ""} p-2 flex gap-2 items-center`} onClick={() => handleUserClick(user._id)}>
                                     <div className='aspect-square relative rounded-full w-fit h-fit flex items-center justify-center p-5 text-white bg-slate-600'>
                                         <i className="ri-user-fill absolute"></i>
                                     </div>
