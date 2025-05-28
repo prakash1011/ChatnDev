@@ -1,0 +1,69 @@
+/* Dark Theme CSS for ChatNDev */
+
+:root {
+  --dark-bg-primary: #1a202c;
+  --dark-bg-secondary: #2d3748;
+  --dark-text-primary: #f7fafc;
+  --dark-text-secondary: #cbd5e0;
+  --dark-border: #4a5568;
+  --dark-accent: #3182ce;
+  --dark-hover: #4299e1;
+  --dark-code-bg: #2d3748;
+}
+
+/* Apply dark theme to body */
+body.dark-theme {
+  background-color: var(--dark-bg-primary);
+  color: var(--dark-text-primary);
+}
+
+/* Headers and panels */
+.dark-theme .header,
+.dark-theme .top-panel {
+  background-color: var(--dark-bg-secondary) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text-primary) !important;
+}
+
+/* Buttons */
+.dark-theme button.primary {
+  background-color: var(--dark-accent) !important;
+  color: white !important;
+}
+
+.dark-theme button.primary:hover {
+  background-color: var(--dark-hover) !important;
+}
+
+/* Code editor */
+.dark-theme .code-editor-area {
+  background-color: var(--dark-code-bg) !important;
+  color: var(--dark-text-primary) !important;
+}
+
+/* File tree */
+.dark-theme .file-selection button {
+  color: var(--dark-text-secondary) !important;
+}
+
+.dark-theme .file-selection button.active {
+  background-color: var(--dark-bg-secondary) !important;
+  color: var(--dark-text-primary) !important;
+}
+
+/* Chat area */
+.dark-theme .message-box {
+  background-color: var(--dark-bg-primary) !important;
+}
+
+.dark-theme .message {
+  background-color: var(--dark-bg-secondary) !important;
+  color: var(--dark-text-primary) !important;
+  border-color: var(--dark-border) !important;
+}
+
+/* Code highlighting in dark mode */
+.dark-theme pre code.hljs {
+  background-color: var(--dark-code-bg) !important;
+  color: var(--dark-text-primary) !important;
+}
