@@ -104,8 +104,32 @@ This is a CRITICAL requirement for the application to function correctly.
 });
 
 export const generateResult = async (prompt) => {
-
-    const result = await model.generateContent(prompt);
-
-    return result.response.text()
+    try {
+        const result = await model.generateContent(prompt);
+        const rawText = result.response.text();
+        
+        // Try to identify JSON in the response
+        const firstBrace = rawText.indexOf('{');
+        const lastBrace = rawText.lastIndexOf('}');
+        
+        // If we found valid JSON delimiters, extract just the JSON part
+        if (firstBrace >= 0 && lastBrace > firstBrace) {
+            const jsonPart = rawText.substring(firstBrace, lastBrace + 1);
+            
+            // Verify this is valid JSON before returning
+            try {
+                JSON.parse(jsonPart); // Test if it's valid JSON
+                return jsonPart; // Return only the valid JSON part
+            } catch (e) {
+                console.error('Error parsing extracted JSON from AI response:', e);
+                // Fall through to return a simple valid JSON
+            }
+        }
+        
+        // If we couldn't extract valid JSON, return a simple valid JSON with the text
+        return JSON.stringify({ text: 'I received your message but had trouble formatting a proper response. Please try again.' });
+    } catch (error) {
+        console.error('Error generating AI content:', error);
+        return JSON.stringify({ text: 'Sorry, I encountered an error processing your request.' });
+    }
 }
