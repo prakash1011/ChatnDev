@@ -587,7 +587,7 @@ const Project = () => {
                     <div className="bottom flex flex-grow max-w-full shrink overflow-auto">
                         {
                             fileTree[ currentFile ] && (
-                                <div className="code-editor-area h-full overflow-auto flex-grow bg-slate-800">
+                                <div className="code-editor-area h-full overflow-auto flex-grow bg-slate-50">
                                     <pre
                                         className="hljs h-full">
                                         <code
@@ -612,8 +612,8 @@ const Project = () => {
                                                 whiteSpace: 'pre-wrap',
                                                 paddingBottom: '25rem',
                                                 counterSet: 'line-numbering',
-                                                backgroundColor: '#1e293b',  // slate-800 color
-                                                padding: '1rem'
+                                                padding: '1rem',
+                                                color: '#333333'  // Dark gray text for good readability
                                             }}
                                         />
                                     </pre>
